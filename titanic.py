@@ -4,13 +4,13 @@ Created on Tue May 14 17:45:14 2019
 
 @author: Abhishek Sharma
 """
-value = X.isnull().sum()
-
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
+import statsmodels.formula.api as sm
+import pdb
 
 def fill_missing_mean_data(data):
     return data.replace(np.NAN, data.mean())
@@ -24,6 +24,29 @@ def categorical_missing_mean_data(data):
     label_encoder, encoded_category = encode_categorical_data(data.dropna())
     categorical_mean = int(round(encoded_category.mean()))
     return label_encoder.inverse_transform(categorical_mean)
+
+def backward_elimination(y, X, sl):
+    numVars = len(X[0])
+    redundant_indices_array = []
+    for i in range(0, numVars):
+        regressor_OLS = sm.OLS(y, X).fit()
+        maxVar = max(regressor_OLS.pvalues)
+        pvalues_arr = [{'index': idx, 'pvalue': data} for idx, data in 
+                            enumerate(regressor_OLS.pvalues.tolist())]
+        if maxVar > sl:
+            if len(redundant_indices_array)>0:
+                for j in redundant_indices_array:
+                    pvalues_arr.insert(j['index'], j)
+            for idx, j in enumerate(pvalues_arr):
+                if pvalues_arr[idx]['pvalue'] == maxVar:
+                    redundant_indices_array.append({'index': idx, 'pvalue': 0})
+            for j in range(0, numVars - i):
+                if (regressor_OLS.pvalues[j] == maxVar):
+                    X = np.delete(X, j, 1)
+        else: 
+            break
+    return X, redundant_indices_array
+
 
 dataset = pd.read_csv('train.csv')
 X_columns = list(range(0, len(dataset.T)))
@@ -71,28 +94,22 @@ embarked_label_encoder, X['Embarked'] = encode_categorical_data(X['Embarked'])
 '''To be done latter'''
 
 # Featureset selection using backward elemination
-import statsmodels.formula.api as sm
+
 X_feature_selection = np.append(arr=np.ones((891, 1)), values=X, axis=1)
 
-X_opt = X_feature_selection[: , [0, 1, 2, 3, 4, 5, 6, 7, 8]]
-regressor_OLS = sm.OLS(endog=y, exog=X_opt).fit()
-regressor_OLS.summary()
+'''Reccurance function'''
+X_opt = X_feature_selection[: , list(range(0, 8))]
 
-X_opt = X_feature_selection[: , [0, 2, 3, 4, 5, 6, 7, 8]]
-regressor_OLS = sm.OLS(endog=y, exog=X_opt).fit()
-regressor_OLS.summary()
-
-X_opt = X_feature_selection[: , [0, 2, 3, 4, 5, 6, 8]]
-regressor_OLS = sm.OLS(endog=y, exog=X_opt).fit()
-regressor_OLS.summary()
-
-X_opt = X_feature_selection[: , [0, 2, 3, 4, 5, 8]]
-regressor_OLS = sm.OLS(endog=y, exog=X_opt).fit()
-regressor_OLS.summary()
+var_X, arr = backward_elimination(y, X_opt, 0.05)
 
 '''Creating new extracted independent variable'''
 
-X_featured = X.iloc[:, [1,2,3,4,7]]
+featured_cols = list(set(list(range(0,8))) - 
+                     set([data['index'] - 1 for data in arr]))
+
+'''featured_cols should be [1,2,3,4,7]'''
+
+X_featured = X.iloc[:, featured_cols]
 
 # Dividing data into train and test sets
 from sklearn.model_selection import train_test_split
